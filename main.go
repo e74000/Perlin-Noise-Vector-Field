@@ -1,6 +1,8 @@
 package main
 
 import (
+	"flag"
+	"fmt"
 	"github.com/aquilax/go-perlin"
 	"github.com/hajimehoshi/ebiten"
 	"github.com/lucasb-eyer/go-colorful"
@@ -23,6 +25,8 @@ type Game struct {
 	my int
 
 	ta float64
+
+	enableAgents bool
 }
 
 type Grid struct {
@@ -35,7 +39,8 @@ type Grid struct {
 	sx int
 	sy int
 
-	agents []Agent
+	agents       []Agent
+	enableAgents bool
 
 	nScale float64
 }
@@ -92,21 +97,23 @@ func (g *Grid) Draw(pixels []byte) {
 		pixels[4*i+3] = 0xff
 	}
 
-	for _, agent := range g.agents {
-		x = int(agent.loc.x)
-		y = int(agent.loc.y)
+	if g.enableAgents {
+		for _, agent := range g.agents {
+			x = int(agent.loc.x)
+			y = int(agent.loc.y)
 
-		v = agent.vel.mag()
-		l = y*g.sx + x
+			v = agent.vel.mag()
+			l = y*g.sx + x
 
-		c = colorful.Hsv((g.dir[l]/math.Pi)*180, Clamp1(1-v), Clamp1(v+g.mag[l]))
+			c = colorful.Hsv((g.dir[l]/math.Pi)*180, Clamp1(1-v), Clamp1(v+g.mag[l]))
 
-		red, green, blue = c.R, c.G, c.B
+			red, green, blue = c.R, c.G, c.B
 
-		pixels[4*l+0] = uint8(red * 255)
-		pixels[4*l+1] = uint8(green * 255)
-		pixels[4*l+2] = uint8(blue * 255)
-		pixels[4*l+3] = 0xff
+			pixels[4*l+0] = uint8(red * 255)
+			pixels[4*l+1] = uint8(green * 255)
+			pixels[4*l+2] = uint8(blue * 255)
+			pixels[4*l+3] = 0xff
+		}
 	}
 }
 
@@ -151,26 +158,28 @@ func (g *Game) Update(_ *ebiten.Image) error {
 		}
 	}
 
-	for i, agent := range g.grid.agents {
-		a = g.grid.dir[int(agent.loc.y)*g.sx+int(agent.loc.x)]
-		m = g.grid.dir[int(agent.loc.y)*g.sx+int(agent.loc.x)]
+	if g.enableAgents {
+		for i, agent := range g.grid.agents {
+			a = g.grid.dir[int(agent.loc.y)*g.sx+int(agent.loc.x)]
+			m = g.grid.dir[int(agent.loc.y)*g.sx+int(agent.loc.x)]
 
-		g.grid.agents[i].vel.x += math.Cos(a) * m * 0.001
-		g.grid.agents[i].vel.y += math.Sin(a) * m * 0.001
+			g.grid.agents[i].vel.x += math.Cos(a) * m * 0.001
+			g.grid.agents[i].vel.y += math.Sin(a) * m * 0.001
 
-		g.grid.agents[i].loc.x += g.grid.agents[i].vel.x
-		g.grid.agents[i].loc.y += g.grid.agents[i].vel.y
+			g.grid.agents[i].loc.x += g.grid.agents[i].vel.x
+			g.grid.agents[i].loc.y += g.grid.agents[i].vel.y
 
-		if g.grid.agents[i].loc.x < 0 || g.grid.agents[i].loc.x > float64(g.sx) || g.grid.agents[i].loc.y < 1 || g.grid.agents[i].loc.y > float64(g.sy) {
-			g.grid.agents[i].loc.x = float64(rand.Int() % g.sx)
-			g.grid.agents[i].loc.y = float64(rand.Int() % g.sy)
-			g.grid.agents[i].vel.x = 0
-			g.grid.agents[i].vel.y = 0
-		}
+			if g.grid.agents[i].loc.x < 0 || g.grid.agents[i].loc.x > float64(g.sx) || g.grid.agents[i].loc.y < 1 || g.grid.agents[i].loc.y > float64(g.sy) {
+				g.grid.agents[i].loc.x = float64(rand.Int() % g.sx)
+				g.grid.agents[i].loc.y = float64(rand.Int() % g.sy)
+				g.grid.agents[i].vel.x = 0
+				g.grid.agents[i].vel.y = 0
+			}
 
-		if g.grid.agents[i].vel.mag() > 1 {
-			g.grid.agents[i].vel.x = math.Cos(a)
-			g.grid.agents[i].vel.y = math.Sin(a)
+			if g.grid.agents[i].vel.mag() > 1 {
+				g.grid.agents[i].vel.x = math.Cos(a)
+				g.grid.agents[i].vel.y = math.Sin(a)
+			}
 		}
 	}
 
@@ -180,10 +189,19 @@ func (g *Game) Update(_ *ebiten.Image) error {
 }
 
 func main() {
+	var enableAgents bool
+
+	flag.BoolVar(&enableAgents, "a", true, "Enable agents")
+
+	flag.Parse()
+
+	fmt.Println(enableAgents)
+
 	g := &Game{
-		sx: 320,
-		sy: 180,
-		ws: 6,
+		sx:           320,
+		sy:           180,
+		ws:           6,
+		enableAgents: enableAgents,
 	}
 
 	g.grid = Grid{
@@ -193,7 +211,8 @@ func main() {
 		xpe: *perlin.NewPerlin(2, 1, 1, time.Now().Unix()),
 		ype: *perlin.NewPerlin(2, 1, 1, time.Now().Unix()+1),
 
-		agents: make([]Agent, 2000),
+		agents:       make([]Agent, 2000),
+		enableAgents: enableAgents,
 
 		sx: g.sx,
 		sy: g.sy,
@@ -203,9 +222,11 @@ func main() {
 
 	rand.Seed(time.Now().Unix() + 2)
 
-	for i := range g.grid.agents {
-		g.grid.agents[i].loc.x = float64(rand.Int() % g.sx)
-		g.grid.agents[i].loc.y = float64(rand.Int() % g.sy)
+	if enableAgents {
+		for i := range g.grid.agents {
+			g.grid.agents[i].loc.x = float64(rand.Int() % g.sx)
+			g.grid.agents[i].loc.y = float64(rand.Int() % g.sy)
+		}
 	}
 
 	ebiten.SetWindowSize(g.sx*g.ws, g.sy*g.ws)
